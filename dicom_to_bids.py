@@ -18,8 +18,8 @@ import numpy as np
 from openpyxl import Workbook
 import string
 import datetime as dt   
-import glob
-
+import pandas as pd
+import math
 
 def myprint(dataset, indent=0):
     """Go through all items in the dataset and print them with custom format
@@ -47,7 +47,17 @@ def myprint(dataset, indent=0):
                 print("{0:s} {1:s} = {2:s}".format(indent_string,
                                                    data_element.name,
                                                    repr_value))
+  
+def isNaN(num):
+    return num != num
+              
                 
+def replace_typeofmri_name(text, key ,replacer):
+
+    if key in text.lower():
+        return text.replace(re.search("[a-zA-Z_0-9]*", text)[0], replacer)
+    else:
+        return text
                 
 def date_string_slipp(file_directory):
     """convert datename with text to a name without text """
@@ -159,6 +169,25 @@ def get_nummeric_only(text):
             
     return nummeric_string   
 
+                                
+def delete_first_zeros(digit_with_zeros):     
+    """Deleting the first zeros from string """       
+                
+    digit_without_zeros = ""
+
+    snap = 1
+    
+    d = 0
+
+    for d in digit_with_zeros:
+
+        if d != "0":
+            snap = 0
+        if snap == 0:
+            digit_without_zeros +=d
+            
+    return digit_without_zeros
+                        
 
 def convert_date(date):
     """converting given date structur to datetime
@@ -289,13 +318,63 @@ def check_session_dir(subject_path, list_of_mask):
     else:
         return 0,0,0
     
-    
+def elimenate_quote(string):
+    """eliminating quote  like " and ' """
+
+    for i, c in enumerate(string):
+        if i==0:
+            begin = c
+        end = c 
+        
+    if begin == '"' and end == '"':
+        return string[1:-1]
+    if begin == "'" and end == "'":
+        return string[1:-1] 
+        
+    else:
+        return string 
     
 # check_session_dir(subject_path,list_of_mask)
 
 
+
+# info2 = get_sessions(df_manual, "Ordner ID", int(subject_directory))
+
+
+
+
+def get_sessions(df, key ,subject_id):
     
     
+    """"""
+    b = False
+    c = False
+    
+    o = 0
+    
+    # df = df_manual
+    # key="Ordner ID"
+    # subject_id = 1000005
+    
+    for i, value in enumerate(df[key]):
+        if value == subject_id:
+            b  = True
+            index = df.loc[df[key] == value].index.item()
+           
+        if isNaN(value) and b:
+            c = True
+            o +=1
+            
+        if not isNaN(value) and b and c:
+            break
+        
+    if b:
+        return df.iloc[index:index+o+1]  
+    else:
+        return pd.DataFrame()
+     
+
+
     
 temp_dir = "/home/temuuleu/PROSCIS/CSB/S-PROSCIS_MRT/persDaten/MRT_daten_BIDS/tmp_dcm2bids"    
     
@@ -307,7 +386,7 @@ data_path_2 = "/home/temuuleu/PROSCIS/CSB/S-PROSCIS_MRT/persDaten/MRT_daten_auto
 
 data_path_1 = "/home/temuuleu/PROSCIS/CSB/S-PROSCIS_MRT/persDaten/MRT_daten_manual"
 
-bids_path  = "/home/temuuleu/PROSCIS/CSB/S-PROSCIS_MRT/persDaten/tmp1_dcm2bids"
+bids_path  = "/home/temuuleu/PROSCIS/CSB/S-PROSCIS_MRT/persDaten/tmp2_dcm2bids"
 
 mask_patter = ["infarct", "flair"]
 
@@ -318,6 +397,7 @@ path_list_name = ["manual", "auto"]
 
 label_pattern = ["infarct", "flair", "csb"]
 
+label_pattern1 = ["mt"]
 
 #remove directory
 os.system('rm -rf '+bids_path)
@@ -329,34 +409,73 @@ sheet = workbook.active
 
 new_subject_index = 1;
 
+
 #xml columns are brider
 for Letter in list(string.ascii_uppercase):
     sheet.column_dimensions[Letter].width = 45
+    
+    
+    
 
 #writing the column    
+
+
+elements_first = ['Subject-ID','ID','TYPE']
+
 
 elements = ["Patient's Sex", "Patient's Birth Date", \
             "Patient's Age", "Patient's Weight",\
                 "Magnetic Field Strength",
                 "Spacing Between Slices"]
     
+all_elements = elements_first + elements
+    
+    
     
 first_loop = True
+
+
+#df = pd.DataFrame(columns=all_elements)
+
+
+df = pd.DataFrame()
+
+
+df_result  = pd.DataFrame()
+
+
+proscis_path = "/home/temuuleu/PROSCIS/CSB/S-PROSCIS_MRT/persDaten/query_results_delineation_20200819.xlsx"
+
+df_query = pd.read_excel(proscis_path, header=[0,1])
+
+
+xls = pd.ExcelFile(proscis_path)
+df_auto = pd.read_excel(xls, 'auto downloads')
+df_manual = pd.read_excel(xls, 'manual downloads')
+
+#test_csv = pd.read_csv(bids_path+"/" +"participants.csv") 
+
 
 for path_index, data_path in enumerate(path_list):
     
 
     for subject_index, subject_directory in enumerate(os.listdir(data_path)):
-        #save the excell in each iteration
-        workbook.save(bids_path+"/" +"participants.xlsx")
         
-        if new_subject_index == 7: break
+        found_flair_manual    = False
+        found_flair_auto      = False
+        found_folder_manual   = False
+        found_folder_auto     = False
+        #save the excell in each iteration
+        #workbook.save(bids_path+"/" +"participants.xlsx")
+        
+        df.to_csv(bids_path+"/" +"participants.csv")  
         
         subject_path = os.path.join(data_path, subject_directory)
         subject_path = path_converter(subject_path)
         
         #check if there is a mask or dcm files
         list_of_mask, ist_mask_there = collect_path_with_string(subject_path, label_pattern)
+        
         
         session_name, maske_name, found_mask_paths = check_session_dir(subject_path,list_of_mask)
                
@@ -419,80 +538,142 @@ for path_index, data_path in enumerate(path_list):
                         first_dcm_file = file
                     
                 dataset = pydicom.dcmread(found_class_path+"/"+first_dcm_file )
+                
                 #myprint(dataset)
+                thisdict = {
+                  'Subject-ID' : 'sub-'+str(new_subject_index-1),
+                  'ID'         : subject_directory,
+                  'TYPE'       : path_list_name[path_index]
+                }
+                
                 
                 for data_index, data_element in enumerate(dataset): 
                     for element_index, element in enumerate(elements):    
                         if elements[element_index] in data_element.name:      
-                            
-                            patient_info = repr(data_element.value)
-                            
+                            patient_info = repr(data_element.value) 
                             if "Patient's Birth Date" in elements[element_index]:
-                                
                                 birthdate = convert_date(patient_info).strftime("%d %b %Y")
-                                
-                                print(birthdate)
-                                
-                                
-                                sheet[string.ascii_uppercase[element_index+2]+str(new_subject_index) ] =  birthdate  
+                                thisdict[elements[element_index]] = birthdate
                             elif "Patient's Age" in elements[element_index]:
-                               
-                                age = get_nummeric_only(patient_info)
-                                
-                                sheet[string.ascii_uppercase[element_index+2]+str(new_subject_index) ] = age
+                                age = elimenate_quote(get_nummeric_only(patient_info))
+                                thisdict[elements[element_index]] = age
                             else:    
-                                sheet[string.ascii_uppercase[element_index+2]+str(new_subject_index) ] = patient_info  
-                                
-                                
- 
-                if new_subject_index > 1:
-                    sheet["A"+str(new_subject_index) ] = 'sub-'+str(new_subject_index-1) 
-                    sheet["B"+str(new_subject_index) ] =  path_list_name[path_index] +"_"+subject_directory
-                    
-                if first_loop: 
-                    sheet["A1" ] = 'Subject-ID'
-
-                if first_loop: 
-                    sheet["B1" ] = 'ID'
-
-                if first_loop:  
-                    for element_index, element in enumerate(elements):
-                        sheet[string.ascii_uppercase[element_index+2] + str(1)] = element
- 
-                element_index += 1       
-                if first_loop:       
-                    sheet[string.ascii_uppercase[element_index] + "1"] = 'First Session Date'
-                       
+                                thisdict[elements[element_index]] = elimenate_quote(patient_info)
+                                  
                 #convert session name to datetime object
                 datetime = convert_date(date_string_slipp(session_name))
                 #write datetime to excel sheet
-                sheet[string.ascii_uppercase[element_index] +str(new_subject_index) ] = datetime.strftime("%H:%M, %A, %d, %b, %Y") 
                 
-                element_index += 1   
+                thisdict['First Session Date']        = datetime.strftime("%H:%M, %A, %d, %b, %Y") 
+                thisdict['Flair Directory']           = found_class_directory_name
+                thisdict['Session Name']              = session_name  
+                thisdict['Mask Name']                 = maske_name
                 
-                if first_loop: 
-                    sheet[string.ascii_uppercase[element_index] + "1"] = 'Flair Directory'
+                
+                print(subject_directory)
+                              
+                
+                #if int(new_subject_index) >= 20: break
+
+                info = get_sessions(df_manual, "Ordner ID", int(subject_directory))
+                
+                
+                if list(info.index):
+                    info = info.loc[(info["FLAIR"] == "x" )]
+                    found_flair_manual = True
                     
-                sheet[string.ascii_uppercase[element_index] +str(new_subject_index) ]= found_class_directory_name 
-                
-                element_index += 1   
-                if first_loop: 
-                    sheet[string.ascii_uppercase[element_index] + "1"] = 'Session Name'
+
+                if  list(info.index) and found_flair_manual:
+                    info = info.loc[(info["Folder name"] == session_name )]
+                    found_folder_manual = True
                     
-                sheet[string.ascii_uppercase[element_index] +str(new_subject_index) ] = session_name 
-                
-                element_index += 1   
-                if first_loop: 
-                    sheet[string.ascii_uppercase[element_index] + "1"] = 'Mask Name'
                     
-                sheet[string.ascii_uppercase[element_index] +str(new_subject_index) ] = maske_name    
+                if  list(info.index) and found_folder_manual:
                     
+                    thisdict['Modality']              = info["Modality"].item() 
+                    thisdict['Date']                  = info["Date"].item()  
+                    thisdict['Time']                  = info["Time"].item() 
+                    thisdict['Name']                  = info["Name"].item() 
+                    thisdict['DOB']                   = info["DOB"].item()
+                    thisdict['Patient_ID']            = info["Patient_ID"].item() 
+                    thisdict['SUID']                  = info["SUID"].item()
+                    thisdict['Folder name']           = info["Folder name"].item()
+                    thisdict['DWI']                   = info["DWI"].item() 
+                    thisdict['FLAIR']                 = info["FLAIR"].item() 
+                    thisdict['LF']                    = info["LF"].item()
+                    
+
+                info = get_sessions(df_auto, "ID", int(subject_directory))
                 
                 
-                # #write original session name 
-                # sheet["E"+str(new_subject_index) ] = found_class_directory_name 
-                # sheet["F"+str(new_subject_index) ] = session_name         
-                # sheet["G"+str(new_subject_index) ] = maske_name                 
+                #first_info["Folder name"] = info
+                
+                if list(info.index):
+                
+                    info = info.loc[(info["FLAIR"] == "x" )]
+                    found_flair_auto = True
+                    
+                    
+                if  list(info.index) and found_flair_auto:
+                    
+                    info = info.loc[(info["Folder name"] == session_name )]
+                    found_folder_auto = True
+                    
+
+                if  list(info.index) and found_folder_auto:
+                
+                
+                    thisdict['Modality']              = info["Modality"].item()   
+                    thisdict['Date']                  = info["Date"].item()  
+                    thisdict['Time']                  = info["Time"].item() 
+                    thisdict['Name']                  = info["Name"].item() 
+                    thisdict['DOB']                   = info["DOB"].item()
+                    thisdict['Patient_ID']            = info["Patient_ID"].item() 
+                    thisdict['SUID']                  = info["SUID"].item() 
+                    thisdict['Folder name']           = info["Folder name"].item()
+                    thisdict['DWI']                   = info["DWI"].item() 
+                    thisdict['FLAIR']                 = info["FLAIR"].item() 
+                    thisdict['LF']                    = info["LF"].item()
+                    
+                if  found_folder_auto == False and found_folder_manual == False:
+                    
+                    thisdict['Modality']              = 0
+                    thisdict['Date']                  = 0
+                    thisdict['Time']                  = 0
+                    thisdict['Name']                  = 0
+                    thisdict['DOB']                   = 0
+                    thisdict['Patient_ID']            = 0
+                    thisdict['SUID']                  = 0
+                    thisdict['Folder name']           = 0
+                    thisdict['DWI']                   = 0 
+                    thisdict['FLAIR']                 = 0
+                    thisdict['LF']                    = 0
+                    
+
+                df = df.append(thisdict, verify_integrity=True, ignore_index=True) 
+                df = df[list(thisdict.keys())]
+                
+
+                #df_temp_result = pd.concat([df, info], axis=1, sort=False)
+                
+                
+                """Baustelle """
+                # data = df_query.loc[df_query["ID"]==int(subject_directory) ]
+                
+                # df_auto.loc[df_auto["ID"]==int(subject_directory)]
+                # df_manual.loc[df_manual["Ordner ID"]==int(subject_directory)]
+                
+                # df_auto.loc[df_auto["ID"]==int('1000001')]
+
+                # ddddd=df_manual.loc[df_manual["Ordner ID"]==int('1000002')]    
+                
+                #df_result = pd.concat([df_result, df_temp_result], axis=0, sort=False)
+                
+
+                df.to_excel(bids_path+"/" +"participants.xlsx") 
+                
+                #thisdict["First Session Date"] = str(df["First Session Date"].median())
+                            
                 try:
                     commad='dcm2niix -b y -z n -v n -o ' \
                     + path_converter(new_data_dir) + ' -f "%p_$s" '+path_converter(found_class_path)
@@ -502,23 +683,30 @@ for path_index, data_path in enumerate(path_list):
                     
                     print('Error')
                     
-                    
+                #rename images    
                 for new_file_index, new_file in enumerate(os.listdir(new_data_dir)):
                         
                         new_file_path = os.path.join(new_data_dir, new_file)
                         
-                        os.rename(new_file_path, new_data_dir +"/subj-" \
-                                  +str(new_subject_index)+"-"+session_name +"-" \
-                                          +new_file)
+                        os.rename(new_file_path, new_data_dir +"/subj_" \
+                                  +str(new_subject_index)+"_"+session_name +"_" \
+                                          +replace_typeofmri_name(new_file,"flair" ,"FLAIR"))
        
 
+                for new_file_index, new_file in enumerate(os.listdir(new_mask_dir)):
+                    
+                    new_file_path = os.path.join(new_mask_dir, new_file)
+                    
+                    
+                    os.rename(new_file_path, new_mask_dir +"/subj_" \
+                              +str(new_subject_index)+"_"+session_name +"_" \
+                                      +replace_typeofmri_name(new_file,"flair" ,"FLAIR"))
+                    
                     
                 first_loop = False;
             
+                
         
         
-        
-        
-        
-        
+  
         
